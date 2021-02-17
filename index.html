@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+
+  <!-- https://favicon.io/favicon-generator/ -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="manifest" href="site.webmanifest">
+
+  <title>Parcelles</title>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body.loading > * {
+      display: none;
+    }
+    body:not(.displayResult) > *:not(form) {
+      display: none;
+    }
+    table, th, td {
+      border: 1px solid black;
+    }
+    th, td {
+      padding: 2px 5px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body class="loading">
+  <form method="GET" action="" onsubmit="document.querySelector('body').classList.add('loading')">
+    <fieldset>
+      <label>code commune (<a href="https://public.opendatasoft.com/explore/dataset/correspondance-code-insee-code-postal/table/" target="_blank">INSEE</a>) <input name="code" type="text" maxlength="5" minlength="5" required /></label>
+      <label>taille min <input name="min" type="number" min="0" /></label>
+      <label>taille max <input name="max" type="number" min="0" /></label>
+      <select name="sort"><option value="asc">- => +</option><option value="desc" selected>+ => -</option></select>
+      <input type="submit" value="chercher" />
+    </fieldset>
+  </form>
+  <pre></pre>
+  <h3></h3>
+  <p><a id="all" target="_blank">Afficher toutes les parcelles sur une carte (max 350 parcelles environ)</a></p>
+  <table>
+    <tr><th>ID</th><th>M2</th><th>SECTION</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th></tr>
+  </table>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    const min = urlParams.get('min')
+    const max = urlParams.get('max')
+    const sort = urlParams.get('sort') || 'asc'
+
+    document.querySelector('input[name=code]').value = code
+    document.querySelector('input[name=min]').value = min
+    document.querySelector('input[name=max]').value = max
+    document.querySelector(`select[name=sort] > option[value=${sort}]`).selected = 'selected'
+
+    if (!code) {
+      document.querySelector('body').classList.remove('loading')
+    } else {
+      fetch(`https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/${code}/geojson/parcelles`)
+        .then(async res => {
+          const bodyElm = document.querySelector('body')
+          bodyElm.classList.remove('loading')
+          bodyElm.classList.add('displayResult')
+
+          const errorElm = document.querySelector('pre')
+
+          if (!res.ok) {
+            if (res.status === 404) {
+              errorElm.innerText = `Le code INSEE ${code} est inconnu`
+            } else {
+              errorElm.innerText = 'HTTP request failed'
+            }
+            return
+          }
+
+          let body
+          try {
+            body = await res.json()
+          } catch (e) {
+            errorElm.innerText = 'HTTP response invalid'
+            return
+          }
+
+          const parcelles = body.features
+            .filter(f => {
+              if (min && f.properties.contenance < min) {
+                return false
+              }
+              if (max && f.properties.contenance > max) {
+                return false
+              }
+              return true
+            })
+            .sort((f1, f2) => sort === 'asc' ? f1.properties.contenance - f2.properties.contenance : f2.properties.contenance - f1.properties.contenance)
+
+          function getCoordinates (parcelle) {
+            const [lon, lat] = window.getLatLngCenter(parcelle.geometry.coordinates[0], 1, 0)
+            return [lat, lon]
+          }
+
+          // can be improved with https://stackoverflow.com/a/1771915
+          const allElm = document.getElementById('all')
+          allElm.href = `https://www.google.com/maps/dir/${parcelles.map(getCoordinates).map(coordinates => coordinates.join(',')).join('/')}//@${getCoordinates(parcelles[0]).join(',')},13z`
+
+          const titleElm = document.querySelector('h3')
+          titleElm.innerText = `${parcelles.length} parcelles`
+
+          const tableElm = document.querySelector('table')
+
+          for (const parcelle of parcelles) {
+            const [lat, lon] = getCoordinates(parcelle)
+            const row = tableElm.insertRow(-1)
+            row.insertCell(0).innerText = parcelle.properties.id
+            row.insertCell(1).innerText = parcelle.properties.contenance
+            row.insertCell(2).innerText = parcelle.properties.section
+            row.insertCell(3).innerHTML = `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">lien</a>`
+            row.insertCell(4).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=19&basemap=satellite" target="_blank">lien</a>`
+            row.insertCell(5).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}" target="_blank">lien</a>`
+
+          }
+        })
+    }
+  </script>
+  <!-- UTILS -->
+  <script>
+    // FOUND HERE: https://stackoverflow.com/a/30033564 + few modifications
+    function rad2degr(rad) { return rad * 180 / Math.PI; }
+    function degr2rad(degr) { return degr * Math.PI / 180; }
+
+    /**
+     * @param latLngInDeg array of arrays with latitude and longtitude
+     *   pairs in degrees. e.g. [[latitude1, longtitude1], [latitude2
+     *   [longtitude2] ...]
+     *
+     * @return array with the center latitude longtitude pairs in
+     *   degrees.
+     */
+    function getLatLngCenter(latLngInDegr, LATIDX=0, LNGIDX=1) {
+      var sumX = 0;
+      var sumY = 0;
+      var sumZ = 0;
+
+      for (var i=0; i<latLngInDegr.length; i++) {
+        var lat = degr2rad(latLngInDegr[i][LATIDX]);
+        var lng = degr2rad(latLngInDegr[i][LNGIDX]);
+        // sum of cartesian coordinates
+        sumX += Math.cos(lat) * Math.cos(lng);
+        sumY += Math.cos(lat) * Math.sin(lng);
+        sumZ += Math.sin(lat);
+      }
+
+      var avgX = sumX / latLngInDegr.length;
+      var avgY = sumY / latLngInDegr.length;
+      var avgZ = sumZ / latLngInDegr.length;
+
+      // convert average x, y, z coordinate to latitude and longtitude
+      var lng = Math.atan2(avgY, avgX);
+      var hyp = Math.sqrt(avgX * avgX + avgY * avgY);
+      var lat = Math.atan2(avgZ, hyp);
+
+      const centerCoordinates = []
+      centerCoordinates[LATIDX] = rad2degr(lat)
+      centerCoordinates[LNGIDX] = rad2degr(lng)
+      return centerCoordinates
+    }
+    window.getLatLngCenter = getLatLngCenter
+  </script>
+</body>
+</html>
