@@ -42,7 +42,7 @@
   <h3></h3>
   <p><a id="all" target="_blank">Afficher toutes les parcelles sur une carte (max 350 parcelles environ)</a></p>
   <table>
-    <tr><th>ID</th><th>M2</th><th>SECTION</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th></tr>
+    <tr><th>ID</th><th>M2</th><th>SECTION</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th><th>PICTURE</th><th>FAVORITE</th></tr>
   </table>
 
   <script>
@@ -56,6 +56,39 @@
     document.querySelector('input[name=min]').value = min
     document.querySelector('input[name=max]').value = max
     document.querySelector(`select[name=sort] > option[value=${sort}]`).selected = 'selected'
+
+    let googleApiKey = localStorage.getItem('googleApiKey')
+    if (!googleApiKey) {
+      const input = prompt("Google API key")
+      if (input) {
+        googleApiKey = input
+        localStorage.setItem('googleApiKey', googleApiKey)
+      }
+    }
+
+    let favoriteIds = []
+    try {
+      const str = localStorage.getItem('favoriteIds')
+      if (str) {
+        const ids = JSON.parse(str)
+        if (ids && Array.isArray(ids) && ids.every(id => typeof id === 'string')) {
+          favoriteIds = ids
+        } else {
+          console.warn('[local storage] the value of "favoriteIds" is invalid.')
+        }
+      }
+    } catch (e) {
+    }
+
+    function toggleFavorite (idToToggle) {
+      if (favoriteIds.includes(idToToggle)) {
+        favoriteIds = favoriteIds.filter(id => id !== idToToggle)
+      } else {
+        favoriteIds.push(idToToggle)
+      }
+      console.info(favoriteIds)
+      localStorage.setItem('favoriteIds', JSON.stringify(favoriteIds))
+    }
 
     if (!code) {
       document.querySelector('body').classList.remove('loading')
@@ -112,15 +145,22 @@
           const tableElm = document.querySelector('table')
 
           for (const parcelle of parcelles) {
+            const id = parcelle.properties.id
             const [lat, lon] = getCoordinates(parcelle)
             const row = tableElm.insertRow(-1)
-            row.insertCell(0).innerText = parcelle.properties.id
+            row.insertCell(0).innerText = id
             row.insertCell(1).innerText = parcelle.properties.contenance
             row.insertCell(2).innerText = parcelle.properties.section
             row.insertCell(3).innerHTML = `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">lien</a>`
             row.insertCell(4).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=19&basemap=satellite" target="_blank">lien</a>`
             row.insertCell(5).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}" target="_blank">lien</a>`
-
+            row.insertCell(6).innerHTML = `<a href="https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=19&scale=1&size=600x600&maptype=satellite&format=jpg&visual_refresh=true&key=${googleApiKey}" target="_blank">pic</a>`
+            const favoriteCell = row.insertCell(7)
+            const renderFavorite = () => {
+              favoriteCell.innerHTML = favoriteIds.includes(id) ? `⭐` : ''
+            }
+            renderFavorite()
+            favoriteCell.onclick = () => { toggleFavorite(id); renderFavorite() }
           }
         })
     }
