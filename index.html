@@ -26,6 +26,12 @@
       padding: 2px 5px;
       text-align: center;
     }
+    td {
+      cursor: pointer;
+    }
+    tr.viewed > td:first-child > * {
+      visibility: hidden;
+    }
   </style>
 </head>
 <body class="loading">
@@ -41,8 +47,9 @@
   <pre></pre>
   <h3></h3>
   <p><a id="all" target="_blank">Afficher toutes les parcelles sur une carte (max 350 parcelles environ)</a></p>
+  <section id="preview"></section>
   <table>
-    <tr><th>ID</th><th>M2</th><th>SECTION</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th><th>PICTURE</th><th>FAVORITE</th></tr>
+    <tr><th></th><th>ID</th><th>M2</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th><th>FAVORITE</th></tr>
   </table>
 
   <script>
@@ -57,27 +64,34 @@
     document.querySelector('input[name=max]').value = max
     document.querySelector(`select[name=sort] > option[value=${sort}]`).selected = 'selected'
 
-    let googleApiKey = localStorage.getItem('googleApiKey')
-    if (!googleApiKey) {
-      const input = prompt("Google API key")
-      if (input) {
-        googleApiKey = input
-        localStorage.setItem('googleApiKey', googleApiKey)
-      }
-    }
-
     let favoriteIds = []
+    let viewedIds = []
     try {
-      const str = localStorage.getItem('favoriteIds')
-      if (str) {
-        const ids = JSON.parse(str)
+      const strFavoriteIds = localStorage.getItem('favoriteIds')
+      if (strFavoriteIds) {
+        const ids = JSON.parse(strFavoriteIds)
         if (ids && Array.isArray(ids) && ids.every(id => typeof id === 'string')) {
           favoriteIds = ids
         } else {
           console.warn('[local storage] the value of "favoriteIds" is invalid.')
         }
       }
+
+      const strViewedIds = localStorage.getItem('viewedIds')
+      if (strViewedIds) {
+        const ids = JSON.parse(strViewedIds)
+        if (ids && Array.isArray(ids) && ids.every(id => typeof id === 'string')) {
+          viewedIds = ids
+        } else {
+          console.warn('[local storage] the value of "viewedIds" is invalid.')
+        }
+      }
     } catch (e) {
+    }
+
+    function getCoordinates (parcelle) {
+      const [lon, lat] = window.getLatLngCenter(parcelle.geometry.coordinates[0], 1, 0)
+      return [lat, lon]
     }
 
     function toggleFavorite (idToToggle) {
@@ -88,6 +102,31 @@
       }
       console.info(favoriteIds)
       localStorage.setItem('favoriteIds', JSON.stringify(favoriteIds))
+    }
+
+    function displayPreview (parcelle) {
+      const { id } = parcelle.properties
+
+      if (!viewedIds.includes(id)) {
+        viewedIds.push(id)
+        localStorage.setItem('viewedIds', JSON.stringify(viewedIds))
+      }
+
+      let googleApiKey = localStorage.getItem('googleApiKey')
+
+      if (!googleApiKey) {
+        const input = prompt("Google API key")
+        if (input) {
+          googleApiKey = input
+          localStorage.setItem('googleApiKey', googleApiKey)
+        }
+      }
+
+      if (googleApiKey) {
+        const [lat, lon] = getCoordinates(parcelle)
+
+        document.querySelector('section#preview').innerHTML = `<img src="https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=19&scale=1&size=400x400&maptype=satellite&format=jpg&visual_refresh=true&key=${googleApiKey}" height="400" width="400"/>`
+      }
     }
 
     if (!code) {
@@ -130,11 +169,6 @@
             })
             .sort((f1, f2) => sort === 'asc' ? f1.properties.contenance - f2.properties.contenance : f2.properties.contenance - f1.properties.contenance)
 
-          function getCoordinates (parcelle) {
-            const [lon, lat] = window.getLatLngCenter(parcelle.geometry.coordinates[0], 1, 0)
-            return [lat, lon]
-          }
-
           // can be improved with https://stackoverflow.com/a/1771915
           const allElm = document.getElementById('all')
           allElm.href = `https://www.google.com/maps/dir/${parcelles.map(getCoordinates).map(coordinates => coordinates.join(',')).join('/')}//@${getCoordinates(parcelles[0]).join(',')},13z`
@@ -142,20 +176,36 @@
           const titleElm = document.querySelector('h3')
           titleElm.innerText = `${parcelles.length} parcelles`
 
+          if (parcelles.length) {
+            displayPreview(parcelles[0])
+          }
+
           const tableElm = document.querySelector('table')
 
           for (const parcelle of parcelles) {
             const id = parcelle.properties.id
             const [lat, lon] = getCoordinates(parcelle)
             const row = tableElm.insertRow(-1)
-            row.insertCell(0).innerText = id
-            row.insertCell(1).innerText = parcelle.properties.contenance
-            row.insertCell(2).innerText = parcelle.properties.section
-            row.insertCell(3).innerHTML = `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">lien</a>`
-            row.insertCell(4).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=19&basemap=satellite" target="_blank">lien</a>`
-            row.insertCell(5).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}" target="_blank">lien</a>`
-            row.insertCell(6).innerHTML = `<a href="https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=19&scale=1&size=600x600&maptype=satellite&format=jpg&visual_refresh=true&key=${googleApiKey}" target="_blank">pic</a>`
-            const favoriteCell = row.insertCell(7)
+            if (viewedIds.includes(id)) {
+              row.classList.add('viewed')
+            }
+
+            row.onclick = () => displayPreview(parcelle)
+
+            // new icon
+            row.insertCell(0).innerHTML = '<span>🆕</span>'
+            // id
+            row.insertCell(1).innerText = id
+            // size
+            row.insertCell(2).innerText = parcelle.properties.contenance
+            // link map
+            row.insertCell(3).innerHTML = `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">map</a>`
+            // link satellite
+            row.insertCell(4).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=19&basemap=satellite" target="_blank">satellite</a>`
+            // link StreetView
+            row.insertCell(5).innerHTML = `<a href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lon}" target="_blank">street view</a>`
+            // icon favorite
+            const favoriteCell = row.insertCell(6)
             const renderFavorite = () => {
               favoriteCell.innerHTML = favoriteIds.includes(id) ? `⭐` : ''
             }
