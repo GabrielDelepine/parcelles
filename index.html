@@ -32,6 +32,18 @@
     tr.viewed > td:first-child > * {
       visibility: hidden;
     }
+    section#preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    section#preview > figure {
+      max-width: 80%;
+    }
+    section#preview > div {
+      padding: 3em;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body class="loading">
@@ -47,7 +59,14 @@
   <pre></pre>
   <h3></h3>
   <p><a id="all" target="_blank">Afficher toutes les parcelles sur une carte (max 350 parcelles environ)</a></p>
-  <section id="preview"></section>
+  <section id="preview">
+    <div id="previous">❮</div>
+    <figure>
+      <img height="400" width="400" />
+      <figcaption>x sur y</figcaption>
+    </figure>
+    <div id="next">❯</div>
+  </section>
   <table>
     <tr><th></th><th>ID</th><th>M2</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th><th>FAVORITE</th></tr>
   </table>
@@ -104,13 +123,8 @@
       localStorage.setItem('favoriteIds', JSON.stringify(favoriteIds))
     }
 
-    function displayPreview (parcelle) {
+    function displayPreview (parcelle, parcelles) {
       const { id } = parcelle.properties
-
-      if (!viewedIds.includes(id)) {
-        viewedIds.push(id)
-        localStorage.setItem('viewedIds', JSON.stringify(viewedIds))
-      }
 
       let googleApiKey = localStorage.getItem('googleApiKey')
 
@@ -124,8 +138,27 @@
 
       if (googleApiKey) {
         const [lat, lon] = getCoordinates(parcelle)
+        document.querySelector('section#preview > figure > img').src = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=19&scale=1&size=400x400&maptype=satellite&format=jpg&visual_refresh=true&key=${googleApiKey}`
 
-        document.querySelector('section#preview').innerHTML = `<img src="https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=19&scale=1&size=400x400&maptype=satellite&format=jpg&visual_refresh=true&key=${googleApiKey}" height="400" width="400"/>`
+        if (!viewedIds.includes(id)) {
+          viewedIds.push(id)
+          localStorage.setItem('viewedIds', JSON.stringify(viewedIds))
+        }
+
+        const index = parcelles.indexOf(parcelle)
+        const isFirst = index === 0
+        const isLast = index +1 === parcelles.length
+
+        const previous = document.querySelector('#previous')
+        const next = document.querySelector('#next')
+
+        previous.style.visibility = isFirst ? 'hidden' : ''
+        next.style.visibility = isLast ? 'hidden' : ''
+
+        document.querySelector('figcaption').innerText = `${index + 1} sur ${parcelles.length}`
+
+        previous.onclick = () => !isFirst && displayPreview(parcelles[index - 1], parcelles)
+        next.onclick = () => !isLast && displayPreview(parcelles[index + 1], parcelles)
       }
     }
 
@@ -177,7 +210,7 @@
           titleElm.innerText = `${parcelles.length} parcelles`
 
           if (parcelles.length) {
-            displayPreview(parcelles[0])
+            displayPreview(parcelles[0], parcelles)
           }
 
           const tableElm = document.querySelector('table')
@@ -190,7 +223,7 @@
               row.classList.add('viewed')
             }
 
-            row.onclick = () => displayPreview(parcelle)
+            row.onclick = () => displayPreview(parcelle, parcelles)
 
             // new icon
             row.insertCell(0).innerHTML = '<span>🆕</span>'
