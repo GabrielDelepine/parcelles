@@ -49,7 +49,7 @@
 <body class="loading">
   <form method="GET" action="" onsubmit="document.querySelector('body').classList.add('loading')">
     <fieldset>
-      <label>code commune (<a href="https://public.opendatasoft.com/explore/dataset/correspondance-code-insee-code-postal/table/" target="_blank">INSEE</a>) <input name="code" type="text" maxlength="5" minlength="5" required /></label>
+      <label>code(s) commune(s) (<a href="https://public.opendatasoft.com/explore/dataset/correspondance-code-insee-code-postal/table/" target="_blank">INSEE</a>) <input name="codes" type="text" maxlength="11" minlength="5" pattern="[0-9][0-9][0-9][0-9][0-9](-[0-9][0-9][0-9][0-9][0-9])?" required /></label>
       <label>taille min <input name="min" type="number" min="0" /></label>
       <label>taille max <input name="max" type="number" min="0" /></label>
       <select name="sort"><option value="asc">- => +</option><option value="desc" selected>+ => -</option></select>
@@ -71,14 +71,14 @@
     <tr><th></th><th>ID</th><th>M2</th><th>MAP</th><th>SATELLITE</th><th>STREET-VIEW</th><th>FAVORITE</th></tr>
   </table>
 
-  <script>
+  <script type="module">
     const urlParams = new URLSearchParams(window.location.search)
-    const code = urlParams.get('code')
+    const codes = urlParams.get('codes')
     const min = urlParams.get('min')
     const max = urlParams.get('max')
     const sort = urlParams.get('sort') || 'asc'
 
-    document.querySelector('input[name=code]').value = code
+    document.querySelector('input[name=codes]').value = codes
     document.querySelector('input[name=min]').value = min
     document.querySelector('input[name=max]').value = max
     document.querySelector(`select[name=sort] > option[value=${sort}]`).selected = 'selected'
@@ -162,10 +162,21 @@
       }
     }
 
-    if (!code) {
+    if (!codes) {
       document.querySelector('body').classList.remove('loading')
     } else {
-      fetch(`https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/${code}/geojson/parcelles`)
+      const [codeStarts, codeEnds] = codes.split('-')
+      const allCodes = [];
+      if (!codeEnds) {
+        allCodes.push(codeStarts)
+      } else {
+        for (let currentCode = codeStarts; currentCode <= codeEnds; currentCode++) {
+          allCodes.push(currentCode)
+        }
+      }
+      let allParcelles = []
+      for (const code of allCodes) {
+        await fetch(`https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/${code}/geojson/parcelles`)
         .then(async res => {
           const bodyElm = document.querySelector('body')
           bodyElm.classList.remove('loading')
@@ -175,9 +186,9 @@
 
           if (!res.ok) {
             if (res.status === 404) {
-              errorElm.innerText = `Le code INSEE ${code} est inconnu`
+              errorElm.innerText += `Le code INSEE ${code} est inconnu;<br />`
             } else {
-              errorElm.innerText = 'HTTP request failed'
+              errorElm.innerText += 'HTTP request failed;<br />'
             }
             return
           }
@@ -202,16 +213,18 @@
             })
             .sort((f1, f2) => sort === 'asc' ? f1.properties.contenance - f2.properties.contenance : f2.properties.contenance - f1.properties.contenance)
 
+          if (parcelles.length > 0) {
+            allParcelles.push(...parcelles)
+          }
+
           // can be improved with https://stackoverflow.com/a/1771915
-          const allElm = document.getElementById('all')
-          allElm.href = `https://www.google.com/maps/dir/${parcelles.map(getCoordinates).map(coordinates => coordinates.join(',')).join('/')}//@${getCoordinates(parcelles[0]).join(',')},13z`
+          if (allParcelles.length > 0) {
+            const allElm = document.getElementById('all')
+            allElm.href = `https://www.google.com/maps/dir/${allParcelles.map(getCoordinates).map(coordinates => coordinates.join(',')).join('/')}//@${getCoordinates(allParcelles[0]).join(',')},13z`
+          }
 
           const titleElm = document.querySelector('h3')
-          titleElm.innerText = `${parcelles.length} parcelles`
-
-          if (parcelles.length) {
-            displayPreview(parcelles[0], parcelles)
-          }
+          titleElm.innerText = `${allParcelles.length} parcelles`
 
           const tableElm = document.querySelector('table')
 
@@ -223,7 +236,7 @@
               row.classList.add('viewed')
             }
 
-            row.onclick = () => displayPreview(parcelle, parcelles)
+            row.onclick = () => displayPreview(parcelle, allParcelles)
 
             // new icon
             row.insertCell(0).innerHTML = '<span>🆕</span>'
@@ -246,6 +259,11 @@
             favoriteCell.onclick = () => { toggleFavorite(id); renderFavorite() }
           }
         })
+      }
+
+      if (allParcelles.length > 0) {
+        displayPreview(allParcelles[0], allParcelles)
+      }
     }
   </script>
   <!-- UTILS -->
