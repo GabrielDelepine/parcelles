@@ -4,11 +4,11 @@ Trouver des parcelles de terrain en France
 
 Filtre sur:
 - Le code INSEE de la commune (obligatoire)
-- La taille minimum de la parcelle en m2 (optionel)
-- La taille maximum de la parcelle en m2 (optionel)
+- La taille minimum de la parcelle en m2 (optionnel)
+- La taille maximum de la parcelle en m2 (optionnel)
 
 
-Le lien vers Google Maps pointe vers le centre géométrique de la parcelle. Il est géométriquement possible que le centre soit en dehors de la parcelle.
+Le lien vers Google Maps pointe vers le centre de la parcelle. (Note: il est géométriquement possible que le centre soit en dehors de la parcelle)
 
 
 Url de demo : https://gabrieldelepine.github.io/parcelles/
