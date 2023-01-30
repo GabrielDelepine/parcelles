@@ -15,6 +15,7 @@ Url de demo : https://gabrieldelepine.github.io/parcelles/
 
 
 Idées de fonctionnalités pour les versions à venir:
+- Utiliser la vue satellite de DVF https://app.dvf.etalab.gouv.fr
 - trier par section quand la taille est identique
 - afficher une zone sur Google Maps et non un point unique (si possible)
 - pouvoir mettre une parcelle en favori
